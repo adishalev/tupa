@@ -1,5 +1,0 @@
-{
-  "C" : ["c_scene", "c_not_scene"],
-  "E" : ["e_scene", "e_not_scene"],
-  "A" : ["a_scene", "a_not_scene"]
-}
