@@ -72,7 +72,6 @@ class ParameterDefinition:
 
 NODE_LABEL_KEY = "n"
 REFINEMENT_LABEL_KEY = "r"
-#REFINEMENT_AXES = []
 
 
 class ClassifierProperty(Enum):
@@ -96,7 +95,7 @@ NODE_LABEL_PARAM_DEFS = [
 ]
 REFINEMENT_LABEL_PARAM_DEFS = [
     (REFINEMENT_LABEL_KEY, dict(dim="refinement_label_dim",    size="max_refinement_labels",    dropout="refinement_label_dropout",
-                          min_count="min_refinement_label_count"))
+                          min_count="min_refinement_label_count"), dict(is_refinement=True))
 ]
 PARAM_DEFS = [
     ("c",            dict(dim="node_category_dim", size="max_node_categories")),
@@ -145,7 +144,7 @@ class Model:
 
     def init_model(self, axis=None, lang=None, init_params=True, refined_categories=None):
         self.set_axis(axis, lang)
-        if not self.refined_categories:
+        if self.config.args.refinement_labels and refined_categories and not self.refined_categories:
             self.set_refined_categories(refined_categories)
         labels = self.classifier.labels if self.classifier else OrderedDict()
         if init_params:  # Actually use the config state to initialize the features and hyperparameters, otherwise empty
@@ -165,10 +164,16 @@ class Model:
             if self.config.args.node_labels and not self.config.args.use_gold_node_labels and \
                     NODE_LABEL_KEY not in labels:
                 labels[NODE_LABEL_KEY] = self.init_labels(NODE_LABEL_KEY)  # Updates self.feature_params
-            if self.config.args.refinement_labels and not self.config.args.use_gold_refinement_labels and \
-                    REFINEMENT_LABEL_KEY not in labels:
-                labels[REFINEMENT_LABEL_KEY] = self.init_labels(REFINEMENT_LABEL_KEY)  # Updates self.feature_params
-
+            #if self.config.args.refinement_labels and REFINEMENT_LABEL_KEY not in labels:
+            #    labels[REFINEMENT_LABEL_KEY] = self.init_labels(REFINEMENT_LABEL_KEY)  # Updates self.feature_params
+            if self.config.args.refinement_labels and refined_categories:
+                for category in refined_categories:
+                    if category not in labels:
+                        labels[category] = self.init_labels(REFINEMENT_LABEL_KEY)  # Updates self.feature_params
+        if not self.config.args.omit_features:
+            self.config.args.omit_features = ""
+        if not self.config.args.refinement_labels and "f" not in self.config.args.omit_features:
+            self.config.args.omit_features += "f"
         if self.classifier:  # Already initialized
             pass
         elif self.config.args.classifier == SPARSE:
@@ -248,14 +253,15 @@ class Model:
 
     def score(self, state, axis):
         features = self.feature_extractor.extract_features(state)
-        return self.classifier.score(features, is_refinement=axis in self.refined_categories, axis=axis), features  # scores is a NumPy array
+        return self.classifier.score(features, axis=axis), features  # scores is a NumPy array
+        #return self.classifier.score(features, is_refinement=axis in self.refined_categories, axis=axis), features  # scores is a NumPy array
 
     def init_features(self, state, train):
         self.init_model()
         axes = [self.axis]
         if self.config.args.node_labels and not self.config.args.use_gold_node_labels:
             axes.append(NODE_LABEL_KEY)
-        if self.config.args.refinement_labels and not self.config.args.use_gold_refinement_labels:
+        if self.config.args.refinement_labels:
             for axis in self.refined_categories:
                 axes.append(axis)
         self.classifier.init_features(self.feature_extractor.init_features(state), axes, train)
@@ -350,15 +356,20 @@ class Model:
         Copy classifier's labels to create new Actions/Labels objects
         Restoring from a model that was just loaded from file, or called by restore()
         """
-        for axis, all_size in self.classifier.labels_t.items():  # all_size is a pair of (label list, size limit)
-            if axis == NODE_LABEL_KEY or axis == REFINEMENT_LABEL_KEY:  # These are node labels rather than action labels
+        for axis, all_size_refinement in self.classifier.labels_t.items():  # all_size is a pair of (label list, size limit)
+            is_refinement = all_size_refinement[2]
+            all_size = all_size_refinement[:2]
+            if is_refinement:
+                labels = UnknownDict() if self.is_finalized else AutoIncrementDict()
+                labels.load(all_size_refinement)
+            elif axis == NODE_LABEL_KEY:  # These are node labels or refinement labels rather than action labels
                 node_labels = self.feature_extractor.params.get(axis)
                 if node_labels and node_labels.size:  # Also used for features, so share the dict
                     del all_size
                     labels = node_labels.data
                 else:  # Not used as a feature, just get labels
                     labels = UnknownDict() if self.is_finalized else AutoIncrementDict()
-                    labels.load(all_size)
+                    labels.load(all_size_refinement)
             else:  # Action labels for format determined by axis
                 labels = Actions(*all_size)
             self.classifier.labels[axis] = labels

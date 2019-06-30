@@ -21,10 +21,10 @@ UNKNOWN_VALUE = 0
 
 class DefaultOrderedDict(OrderedDict, Labels):
     # Source: http://stackoverflow.com/a/6190500/223267
-    def __init__(self, default_factory=None, *args, size=None, **kwargs):
+    def __init__(self, default_factory=None, *args, size=None, is_refinement=False, **kwargs):
         if default_factory is not None and not callable(default_factory):
             raise TypeError("default_factory must be callable")
-        Labels.__init__(self, size)
+        Labels.__init__(self, size, is_refinement)
         self._all = []
         OrderedDict.__init__(self, *args, **kwargs)
         self._all = list(self.keys())
@@ -79,14 +79,14 @@ class AutoIncrementDict(DefaultOrderedDict):
     """
     DefaultOrderedDict that returns an auto-incrementing index for new keys
     """
-    def __init__(self, size=None, keys=(), d=None, unknown=UNKNOWN_VALUE):
+    def __init__(self, size=None, is_refinement=False, keys=(), d=None, unknown=UNKNOWN_VALUE):
         """
         :param size: maximum size to allow, after which `unknown' will be returned
         :param keys: initial sequence of keys
         :param d: dictionary to initialize from
         :param unknown: value to return for missing keys
         """
-        super().__init__(None, sorted(d.items(), key=itemgetter(1)) if d else {}, size=size)
+        super().__init__(None, sorted(d.items(), key=itemgetter(1)) if d else {}, size=size, is_refinement=is_refinement)
         self.finalized = (size is None)
         self.unknown = self.setdefault(None, unknown)
         for key in keys:
@@ -123,13 +123,13 @@ class DropoutDict(AutoIncrementDict):
     """
     UnknownDict that sometimes returns the unknown value even for existing keys
     """
-    def __init__(self, d=None, dropout=0, size=None, keys=(), min_count=1):
+    def __init__(self, d=None, dropout=0, size=None, is_refinement=False, keys=(), min_count=1):
         """
         :param d: base dict to initialize by
         :param dropout: dropout parameter
         :param min_count: minimum number of occurrences for a key before it is actually added to the dict
         """
-        super().__init__(size, keys, d=d)
+        super().__init__(size, is_refinement, keys, d=d)
         assert dropout >= 0, "Dropout value must be >= 0, but given %f" % dropout
         self.dropout, self.counts, self.min_count = (d.dropout, d.counts, d.min_count) \
             if d is not None and isinstance(d, DropoutDict) else (dropout, Counter(), min_count)

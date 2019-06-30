@@ -54,14 +54,6 @@ class State:
         self.actions = []  # History of applied actions
         self.type_validity_cache = {}
 
-    def is_valid_action(self, action):
-    @staticmethod
-    def get_layer(passage, layer):
-        try:
-            return passage.layer(layer.LAYER_ID)
-        except KeyError as e:
-            raise IOError("Passage %s is missing layer %s" % (passage.ID, layer.LAYER_ID)) from e
-
     def is_valid_action(self, axis, action):
         """
         :param action: action to check for validity
@@ -228,10 +220,18 @@ class State:
             return False
         return True
 
+    def is_valid_refinement(self, axis, label):
+        """
+        :param label: label to check for validity
+        :return: is the label valid in the current state?
+        """
+        return True
+
     def check_valid_label(self, axis, label, message=False):
         if self.args.constraints and label is not None:
             valid = self.constraints.allow_label(self.need_label[axis], label)
             self.check(valid, message and "May not label %s as %s: %s" % (self.need_label[axis], label, valid))
+
 
     @staticmethod
     def check(condition, *args, **kwargs):
@@ -255,7 +255,7 @@ class State:
                 child = action.node = self.add_node(orig_node=action.orig_node, implicit=True)
             action.edge = self.add_edge(Edge(parent, child, tag, action.orig_edge, remote=action.remote))
             if self.args.refinement_labels and tag in self.passage.refined_categories:
-                    self.need_label[tag] = action.edge
+                self.need_label[tag] = action.edge
             if action.node:
                 self.buffer.appendleft(action.node)
         elif action.is_type(Actions.Shift):  # Push buffer head to stack; shift buffer
@@ -343,7 +343,10 @@ class State:
             return None
 
     def label_axis(self, axis, label):
-        self.need_label[axis].label = label
+        if axis in self.passage.refined_categories:
+            self.need_label[axis].refinement = label
+        else:
+            self.need_label[axis].label = label
         self.need_label[axis].labeled = True
         self.log.append("label: %s" % self.need_label[axis])
         self.type_validity_cache = {}

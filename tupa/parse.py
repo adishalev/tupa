@@ -1,6 +1,6 @@
 import sys
 import time
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 
 import concurrent.futures
 import os
@@ -13,12 +13,12 @@ from semstr.util.amr import LABEL_ATTRIB, WIKIFIER
 from semstr.validation import validate
 from tqdm import tqdm
 from ucca import diffutil, ioutil, textutil, layer0, layer1
-from ucca.evaluation import LABELED, UNLABELED, EVAL_TYPES, evaluate as evaluate_ucca
+from ucca.evaluation import LABELED, UNLABELED, REFINEMENT, EVAL_TYPES, evaluate as evaluate_ucca
 from ucca.normalization import normalize
 
 from tupa.__version__ import GIT_VERSION
 from tupa.config import Config, Iterations
-from tupa.model import Model, NODE_LABEL_KEY, REFINEMENT_LABEL_KEY, ClassifierProperty
+from tupa.model import Model, NODE_LABEL_KEY, ClassifierProperty
 from tupa.oracle import Oracle
 from tupa.states.state import State
 from tupa.traceutil import set_traceback_listener
@@ -84,12 +84,18 @@ class PassageParser(AbstractParser):
         self.config.set_format(self.in_format)
         WIKIFIER.enabled = self.config.args.wikification
         self.state = State(self.passage)
-        self.refined_categories = self.passage.refined_categories
+        self.refined_categories = set()
+        # if refinement_labels was set to False, ignore refinements!
+        if self.config.args.refinement_labels:
+            for n in self.passage.layer(layer1.LAYER_ID).all:
+                for e in n:
+                    self.refined_categories |= set(c.parent for c in e if c.parent)
         # Passage is considered labeled if there are any edges or node labels in it
         edges, node_labels = map(any, zip(*[(n.outgoing, n.attrib.get(LABEL_ATTRIB))
                                             for n in self.passage.layer(layer1.LAYER_ID).all]))
         self.oracle = Oracle(self.passage) if self.training or self.config.args.verify or (
-                (self.config.args.verbose > 1 or self.config.args.use_gold_node_labels or self.config.args.action_stats)
+                (self.config.args.verbose > 1 or self.config.args.use_gold_node_labels or self.config.args.action_stats
+                 or self.config.args.use_gold_action_labels)
                 and (edges or node_labels)) else None
         for model in self.models:
             model.init_model(self.config.format, lang=self.lang if self.config.args.multilingual else None,
@@ -139,8 +145,8 @@ class PassageParser(AbstractParser):
             self.config.print(lambda: "\n".join(["  predicted: %-15s true: %-15s taken: %-15s %s" % (
                 predicted_action, "|".join(map(str, true_actions.values())), action, self.state) if self.oracle else
                                           "  action: %-15s %s" % (action, self.state)]  +
-                (["  predicted %s label: %-9s true label: %s" % (predicted_label[axis], true_label[axis]) if self.oracle and not
-                 self.config.args.use_gold_node_labels else "  label: %s" % label[axis]] for axis in need_label) +
+                ["  predicted label: %-9s true label: %s" % (predicted_label[axis], true_label[axis]) if self.oracle and not
+                 self.config.args.use_gold_node_labels else "  label: %s" % label[axis] for axis in need_label] +
                 ["    " + l for l in self.state.log]))
             if self.state.finished:
                 return  # action is Finish (or early update is triggered)
@@ -176,26 +182,31 @@ class PassageParser(AbstractParser):
     def choose(self, true, axis=None, name="action"):
         if axis is None:
             axis = self.model.axis
-        elif (axis == NODE_LABEL_KEY and self.config.args.use_gold_node_labels) or \
-                (axis in self.refined_categories and self.config.args.use_gold_refinement_labels):
+        elif axis == NODE_LABEL_KEY and self.config.args.use_gold_node_labels:
             return true, true
-        labels_axis = axis if axis not in self.refined_categories else REFINEMENT_LABEL_KEY
-        labels = self.model.classifier.labels[labels_axis]
-        if axis == NODE_LABEL_KEY or axis in self.refined_categories:
+        #labels_axis = axis if axis not in self.refined_categories else REFINEMENT_LABEL_KEY
+        #labels = self.model.classifier.labels[labels_axis]
+        labels = self.model.classifier.labels[axis]
+        if axis == NODE_LABEL_KEY:
             true_keys = (labels[true],) if self.oracle else ()  # Must be before score()
             is_valid = self.state.is_valid_label
+        elif axis in self.refined_categories:
+            true_keys = (labels[true],) if self.oracle else ()  # Must be before score()
+            is_valid = self.state.is_valid_refinement
         else:
             true_keys = None
             is_valid = self.state.is_valid_action
         scores, features = self.model.score(self.state, axis)
         for model in self.models[1:]:  # Ensemble if given more than one model; align label order and add scores
-            label_scores = dict(zip(model.classifier.labels[labels_axis].all, self.model.score(self.state, axis)[0]))
+            #label_scores = dict(zip(model.classifier.labels[labels_axis].all, self.model.score(self.state, axis)[0]))
+            label_scores = dict(zip(model.classifier.labels[axis].all, self.model.score(self.state, axis)[0]))
             scores += [label_scores.get(a, 0) for a in labels.all]  # Product of Experts, assuming log(softmax)
         self.config.print(lambda: "  %s scores: %s" % (name, tuple(zip(labels.all, scores))), level=4)
         try:
             label = pred = self.predict(scores, labels.all, axis, is_valid)
         except StopIteration as e:
             raise ParserException("No valid %s available\n%s" % (name, self.oracle.log if self.oracle else "")) from e
+        # label is corrected to the true label on training time, but remains the predicted label on dev/test time
         label, is_correct, true_keys, true_values = self.correct(axis, label, pred, scores, true, true_keys)
         if self.training:
             if not (is_correct and ClassifierProperty.update_only_on_error in self.model.classifier_properties):
@@ -210,11 +221,15 @@ class PassageParser(AbstractParser):
             model.classifier.finished_step(self.training)
             if axis != NODE_LABEL_KEY and axis not in self.refined_categories:
                 model.classifier.transition(label, axis=axis)
+        if axis != NODE_LABEL_KEY and axis not in self.refined_categories and self.config.args.use_gold_action_labels:
+            return true_values[0], true_values[0]
         return label, pred
 
     def correct(self, axis, label, pred, scores, true, true_keys):
         true_values = is_correct = ()
         if axis == NODE_LABEL_KEY or axis in self.refined_categories:
+            if not self.training:
+                print("here")
             if self.oracle:
                 is_correct = (label == true)
                 if is_correct:
@@ -229,7 +244,7 @@ class PassageParser(AbstractParser):
             if is_correct:
                 self.correct_action_count += 1
             else:
-                label = true_values[scores[true_keys].argmax()] if self.training else pred
+                label = true_values[scores[true_keys].argmax()] if (self.training or self.config.args.use_gold_action_labels) else pred
             self.action_count += 1
         return label, is_correct, true_keys, true_values
 
@@ -284,12 +299,16 @@ class PassageParser(AbstractParser):
     def evaluate(self, mode=ParseMode.test):
         if self.format:
             self.config.print("Converting to %s and evaluating..." % self.format)
-        self.eval_type = UNLABELED if self.config.is_unlabeled(self.in_format) else LABELED
+        self.eval_type = REFINEMENT if (self.refined_categories and self.config.args.refinement_labels) else UNLABELED \
+            if self.config.is_unlabeled(self.in_format) else LABELED
         evaluator = EVALUATORS.get(self.format, evaluate_ucca)
         score = evaluator(self.out, self.passage, converter=get_output_converter(self.format),
-                          verbose=self.out and self.config.args.verbose > 3,
+                          verbose=self.out and self.config.args.verbose > 0,
                           constructions=self.config.args.constructions,
-                          eval_types=(self.eval_type,) if mode is ParseMode.dev else (LABELED, UNLABELED))
+                          eval_types=(self.eval_type,) if mode is ParseMode.dev else (REFINEMENT, LABELED, UNLABELED)
+                          if self.eval_type == REFINEMENT else (LABELED, UNLABELED),
+                          units=True,
+                          default=OrderedDict((str(c), c) for c in self.config.args.constructions))
         self.f1 = average_f1(score, self.eval_type)
         score.lang = self.lang
         return score
@@ -470,6 +489,7 @@ class Parser(AbstractParser):
         if self.dev:
             if not self.best_score:
                 self.save(finalized)
+            # apparently, the scores are calculated without refinement as eval type, well, check why.
             average_score, scores = self.eval(self.dev, ParseMode.dev, self.config.args.devscores)
             if average_score >= self.best_score:
                 print("Better than previous best score (%.3f)" % self.best_score)
@@ -584,11 +604,11 @@ def print_scores(scores, filename, prefix=None, prefix_title=None):
         try:
             with open(filename, "a") as f:
                 if print_title:
-                    titles = scores.titles()
+                    titles = scores.titles(eval_type=get_eval_type(scores))
                     if prefix_title is not None:
                         titles = [prefix_title] + titles
                     print(",".join(titles), file=f)
-                fields = scores.fields()
+                fields = scores.fields(eval_type=get_eval_type(scores))
                 if prefix is not None:
                     fields.insert(0, prefix)
                 print(",".join(fields), file=f)
@@ -620,8 +640,12 @@ def average_f1(scores, eval_type=None):
     return 0
 
 
+def eval_refinement(scores):
+    return Config().args.refinement_labels and scores.format == REFINEMENT
+
+
 def get_eval_type(scores):
-    return UNLABELED if Config().is_unlabeled(scores.format) else LABELED
+    return REFINEMENT if eval_refinement(scores) else UNLABELED if Config().is_unlabeled(scores.format) else LABELED
 
 
 # Marks input passages as text so that we don't accidentally train on them

@@ -11,7 +11,7 @@ from ..model_util import DropoutDict
 class FeatureParameters(Labels):
     def __init__(self, suffix, dim, size, dropout=0, updated=True, num=1, init=None, data=None, indexed=False,
                  copy_from=None, filename=None, min_count=1, enabled=True, node_dropout=0, vocab=None,
-                 lang_specific=False):
+                 lang_specific=False, is_refinement=False):
         """
         :param suffix: one-character title for feature
         :param dim: vector dimension or, filename to load vectors from, or Word2Vec object
@@ -30,7 +30,7 @@ class FeatureParameters(Labels):
         :param vocab: name of file to load mapping of integer ID to word form (to avoid loading spaCy)
         :param lang_specific: whether the feature params should be separate per language
         """
-        super().__init__(size)
+        super().__init__(size, is_refinement)
         self.suffix = suffix
         self.dim = dim
         self.size = size
@@ -71,7 +71,7 @@ class FeatureParameters(Labels):
                 vectors = self.word_vectors()
                 keys = vectors.keys()
                 self.init = np.array(list(vectors.values()))
-            self.data = DropoutDict(size=self.size, keys=keys, dropout=self.dropout, min_count=self.min_count)
+            self.data = DropoutDict(size=self.size, is_refinement=self.is_refinement, keys=keys, dropout=self.dropout, min_count=self.min_count)
 
     def word_vectors(self):
         lang = Config().args.lang

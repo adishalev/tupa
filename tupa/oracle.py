@@ -68,6 +68,8 @@ class Oracle:
                     invalid.append((action, e))
         if self.args.validate_oracle:
             assert actions, self.generate_log(invalid, state)
+        if not actions:
+            print("here")
         return actions
 
     def generate_log(self, invalid, state):

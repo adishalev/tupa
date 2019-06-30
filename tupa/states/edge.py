@@ -29,11 +29,13 @@ class Edge:
                ((", " + str(self.remote)) if self.remote else "") + ")"
 
     def __str__(self):
+        if self.refinement:
+            return "%s -%s:%s-> %s%s" % (self.parent, self.tag, self.refinement, self.child, " (remote)" if self.remote else "")
         return "%s -%s-> %s%s" % (self.parent, self.tag, self.child, " (remote)" if self.remote else "")
 
     def __eq__(self, other):
         return other and self.parent.index == other.parent.index and self.child == other.child and \
-               self.tag == other.tag and self.remote == other.remote
+               self.tag == other.tag and self.refinement == other.refinement and self.remote == other.remote
 
     def __hash__(self):
         return hash((self.parent.index, self.child.index, self.tag))
