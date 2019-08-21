@@ -403,8 +403,8 @@ class Config(object, metaclass=Singleton):
             if k not in amr_hyperparams and not getattr(amr_hyperparams, k, None):
                 setattr(amr_hyperparams, k, v)
         refinement_hyperparams = self.hyperparams.specific["ucca"]
-        for k, v in dict(refinement_label_dim=20, max_refinement_labels=1000, refinement_category_dim=5,
-                         max_refinement_categories=50, refinement_label_dropout=0.4).items():
+        for k, v in dict(refinement_label_dim=20, max_refinement_labels=1000,
+                         refinement_label_dropout=0.4).items():
             if k not in refinement_hyperparams and not getattr(refinement_hyperparams, k, None):
                 setattr(refinement_hyperparams, k, v)
         self.set_format(update=True)
