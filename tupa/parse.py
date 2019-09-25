@@ -228,8 +228,6 @@ class PassageParser(AbstractParser):
     def correct(self, axis, label, pred, scores, true, true_keys):
         true_values = is_correct = ()
         if axis == NODE_LABEL_KEY or axis in self.refined_categories:
-            if not self.training:
-                print("here")
             if self.oracle:
                 is_correct = (label == true)
                 if is_correct:
@@ -514,6 +512,7 @@ class Parser(AbstractParser):
     def eval(self, passages, mode, scores_filename, display=True):
         print("Evaluating on %s passages" % mode.name)
         passage_scores = [s for _, s in self.parse(passages, mode=mode, evaluate=True, display=display)]
+        #  check why the format is labeled, it should be the frist element but the first element is refinemnt.
         scores = Scores(passage_scores)
         average_score = average_f1(scores)
         prefix = ".".join(map(str, [self.iteration, self.epoch] + (
@@ -634,7 +633,7 @@ def to_lower_case(passages):
 def average_f1(scores, eval_type=None):
     for e in (eval_type or get_eval_type(scores),) + EVAL_TYPES:
         try:
-            return scores.average_f1(e)
+            return scores.average_f1(mode=e)
         except ValueError:
             pass
     return 0
