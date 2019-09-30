@@ -33,7 +33,7 @@ FEATURE_TEMPLATES = (
     "b0Lwmefn#^$"
     "b0Rwmefn#^$"
     "s0b0ef" "b0s0ef"  # specific edges
-    "a0efAa1efA",  # past actions
+    "a0eAa1eA",  # past actions
 )
 INDEXED = "wmtudT"  # words, lemmas, fine POS tags, coarse/universal POS tags, dep rels, entity type
 DEFAULT = ()  # intermediate value for missing features

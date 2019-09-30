@@ -71,7 +71,7 @@ class ParameterDefinition:
 
 
 NODE_LABEL_KEY = "n"
-REFINEMENT_LABEL_KEY = "r"
+REFINEMENT_LABEL_KEY = "f"
 
 
 class ClassifierProperty(Enum):
@@ -144,7 +144,7 @@ class Model:
 
     def init_model(self, axis=None, lang=None, init_params=True, refined_categories=None):
         self.set_axis(axis, lang)
-        if self.config.args.refinement_labels and refined_categories and not self.refined_categories:
+        if refined_categories and not self.refined_categories:
             self.set_refined_categories(refined_categories)
         labels = self.classifier.labels if self.classifier else OrderedDict()
         if init_params:  # Actually use the config state to initialize the features and hyperparameters, otherwise empty
@@ -166,14 +166,15 @@ class Model:
                 labels[NODE_LABEL_KEY] = self.init_labels(NODE_LABEL_KEY)  # Updates self.feature_params
             #if self.config.args.refinement_labels and REFINEMENT_LABEL_KEY not in labels:
             #    labels[REFINEMENT_LABEL_KEY] = self.init_labels(REFINEMENT_LABEL_KEY)  # Updates self.feature_params
-            if self.config.args.refinement_labels and refined_categories:
-                for category in refined_categories:
+            if self.config.args.refinement_labels and self.refined_categories:
+                for category in self.refined_categories:
                     if category not in labels:
-                        labels[category] = self.init_labels(REFINEMENT_LABEL_KEY)  # Updates self.feature_params
-        if not self.config.args.omit_features:
-            self.config.args.omit_features = ""
-        if not self.config.args.refinement_labels and "f" not in self.config.args.omit_features:
-            self.config.args.omit_features += "f"
+                        if category not in labels:
+                            labels[category] = self.init_labels(REFINEMENT_LABEL_KEY)  # Updates self.feature_params
+            if not self.config.args.omit_features:
+                self.config.args.omit_features = ""
+            if not self.refined_categories and "f" not in self.config.args.omit_features:
+                self.config.args.omit_features += "f"
         if self.classifier:  # Already initialized
             pass
         elif self.config.args.classifier == SPARSE:
@@ -343,6 +344,7 @@ class Model:
             is_finalized = model.is_finalized
         self.config.print("Restoring %sfinalized model" % ("" if is_finalized else "non-"), level=1)
         self.filename = model.filename
+        self.refined_categories = model.refined_categories
         self.feature_extractor = feature_extractor or model.feature_extractor
         self.classifier = classifier or model.classifier
         self.is_finalized = is_finalized

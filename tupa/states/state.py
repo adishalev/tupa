@@ -343,7 +343,7 @@ class State:
             return None
 
     def label_axis(self, axis, label):
-        if axis in self.passage.refined_categories:
+        if self.args.refinement_labels and axis in self.passage.refined_categories:
             self.need_label[axis].refinement = label
         else:
             self.need_label[axis].label = label

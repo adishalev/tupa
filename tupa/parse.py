@@ -78,18 +78,21 @@ class PassageParser(AbstractParser):
         self.ignore_node = None if self.config.args.linkage else lambda n: n.tag == layer1.NodeTags.Linkage
         self.state_hash_history = set()
         self.state = self.oracle = self.eval_type = None
-        self.refined_categories = []
+        self.refined_categories = set()
 
     def init(self):
         self.config.set_format(self.in_format)
         WIKIFIER.enabled = self.config.args.wikification
         self.state = State(self.passage)
-        self.refined_categories = set()
         # if refinement_labels was set to False, ignore refinements!
-        if self.config.args.refinement_labels:
-            for n in self.passage.layer(layer1.LAYER_ID).all:
-                for e in n:
-                    self.refined_categories |= set(c.parent for c in e if c.parent)
+        #if self.config.args.refinement_labels:
+        #    for n in self.passage.layer(layer1.LAYER_ID).all:
+        #        for e in n:
+        #            self.refined_categories |= set(c.parent for c in e if c.parent)
+        # find all the refinement labels, if exist, we might want to use them as features but not to predict them!
+        for n in self.passage.layer(layer1.LAYER_ID).all:
+            for e in n:
+                self.refined_categories |= set(c.parent for c in e if c.parent)
         # Passage is considered labeled if there are any edges or node labels in it
         edges, node_labels = map(any, zip(*[(n.outgoing, n.attrib.get(LABEL_ATTRIB))
                                             for n in self.passage.layer(layer1.LAYER_ID).all]))
@@ -163,7 +166,8 @@ class PassageParser(AbstractParser):
 
     def get_true_label(self, axis, need_label):
         try:
-            return self.oracle.get_label(self.state, axis, axis in self.refined_categories, need_label) if self.oracle else (None, None)
+            is_refinement = self.config.args.refinement_labels and axis in self.refined_categories
+            return self.oracle.get_label(self.state, axis, is_refinement, need_label) if self.oracle else (None, None)
         except AssertionError as e:
             if self.training:
                 raise ParserException("Error in getting label from oracle during training") from e

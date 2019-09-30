@@ -299,7 +299,7 @@ def get_punctuation(nodes, terminals):
 ACTION_PROP_GETTERS = {
     "A": lambda a, *_: a.type,
     "e": lambda a, *_: a.tag if isinstance(a.tag, str) or Config().args.missing_node_features else None,  # Swap, Label
-    "f": lambda a, *_: a.refinement
+#    "f": lambda a, *_: a.refinement
 }
 
 
