@@ -69,6 +69,7 @@ def add_param_arguments(ap=None, arg_default=None):  # arguments with possible f
     add_boolean(group, "eval-refinement", "evaluation of refinement labels, if supported by format", default=True)
     add_boolean(group, "refinement-labels", "prediction of refinement labels, if supported by format", default=True)
 
+
     group = ap.add_argument_group(title="Node labels")
     add(group, "--max-node-labels", type=int, default=0, help="max number of node labels to allow")
     add(group, "--max-node-categories", type=int, default=0, help="max node categories to allow")

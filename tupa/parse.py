@@ -301,7 +301,7 @@ class PassageParser(AbstractParser):
     def evaluate(self, mode=ParseMode.test):
         if self.format:
             self.config.print("Converting to %s and evaluating..." % self.format)
-        self.eval_type = REFINEMENT if (self.refined_categories and self.config.args.eval_refinement) else UNLABELED \
+        self.eval_type = REFINEMENT if self.config.args.eval_refinement else UNLABELED \
             if self.config.is_unlabeled(self.in_format) else LABELED
         evaluator = EVALUATORS.get(self.format, evaluate_ucca)
         score = evaluator(self.out, self.passage, converter=get_output_converter(self.format),

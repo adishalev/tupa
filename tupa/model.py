@@ -142,7 +142,7 @@ class Model:
         return [ParameterDefinition(args or self.config.args, n, *k) for n, *k in
                 NODE_LABEL_PARAM_DEFS + REFINEMENT_LABEL_PARAM_DEFS + PARAM_DEFS]
 
-    def init_model(self, axis=None, lang=None, init_params=True, refined_categories=None):
+    def init_model(self, axis=None, lang=None, init_params=True, refined_categories=[]):
         self.set_axis(axis, lang)
         if refined_categories and not self.refined_categories:
             self.set_refined_categories(refined_categories)
@@ -164,13 +164,10 @@ class Model:
             if self.config.args.node_labels and not self.config.args.use_gold_node_labels and \
                     NODE_LABEL_KEY not in labels:
                 labels[NODE_LABEL_KEY] = self.init_labels(NODE_LABEL_KEY)  # Updates self.feature_params
-            #if self.config.args.refinement_labels and REFINEMENT_LABEL_KEY not in labels:
-            #    labels[REFINEMENT_LABEL_KEY] = self.init_labels(REFINEMENT_LABEL_KEY)  # Updates self.feature_params
-            if self.config.args.refinement_labels and self.refined_categories:
+            if self.config.args.refinement_labels:
                 for category in self.refined_categories:
                     if category not in labels:
-                        if category not in labels:
-                            labels[category] = self.init_labels(REFINEMENT_LABEL_KEY)  # Updates self.feature_params
+                        labels[category] = self.init_labels(REFINEMENT_LABEL_KEY)  # Updates self.feature_params
             if not self.config.args.omit_features:
                 self.config.args.omit_features = ""
             if not self.refined_categories and "f" not in self.config.args.omit_features:
