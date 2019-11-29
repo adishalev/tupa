@@ -136,7 +136,10 @@ class PassageParser(AbstractParser):
             true_actions = self.get_true_actions()
             action, predicted_action = self.choose(true_actions)
             self.state.transition(action)
-            need_label = label = predicted_label = true_label = {}
+            need_label = {}
+            label = {}
+            predicted_label = {}
+            true_label = {}
             for axis in self.state.need_label:
                 need_label[axis], label[axis], predicted_label[axis], true_label[axis] = self.label_axis(axis, action)
             if self.config.args.action_stats:

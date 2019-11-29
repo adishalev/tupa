@@ -153,7 +153,7 @@ class Node:
             try:
                 assert node.node is not None, "Remote edge from nonexistent node"
                 assert edge.child.node is not None, "Remote edge to nonexistent node"
-                l1.add_remote(node.node, edge.tag, edge.child.node)
+                l1.add_remote(node.node, edge.tag, edge.refinement, edge.child.node)
             except AssertionError:
                 if verify:
                     raise
